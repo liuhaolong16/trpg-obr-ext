@@ -4,13 +4,13 @@
   "manifest_version": 1,
   "author": "JARVIS / trpg-package",
   "description": "把本地跑团引擎的场景指令应用到这个枭熊房间：轮询 /scene/pending，执行移动/显隐/播报，回传场景快照。",
-  "icon": "https://cdn.jsdelivr.net/gh/liuhaolong16/trpg-obr-ext@main/icon.svg",
+  "icon": "https://cdn.jsdelivr.net/gh/liuhaolong16/trpg-obr-ext@6890f10/icon.svg",
   "action": {
     "title": "跑团引擎桥",
-    "icon": "https://cdn.jsdelivr.net/gh/liuhaolong16/trpg-obr-ext@main/icon.svg",
-    "popover": "https://cdn.jsdelivr.net/gh/liuhaolong16/trpg-obr-ext@main/index.html",
+    "icon": "https://cdn.jsdelivr.net/gh/liuhaolong16/trpg-obr-ext@6890f10/icon.svg",
+    "popover": "https://cdn.jsdelivr.net/gh/liuhaolong16/trpg-obr-ext@6890f10/index.html",
     "height": 420,
     "width": 340
   },
-  "background_url": "https://cdn.jsdelivr.net/gh/liuhaolong16/trpg-obr-ext@main/background.html"
+  "background_url": "https://cdn.jsdelivr.net/gh/liuhaolong16/trpg-obr-ext@6890f10/background.html"
 }
