@@ -1,0 +1,16 @@
+{
+  "name": "跑团引擎桥 · TRPG Engine Bridge",
+  "version": "0.1.0",
+  "manifest_version": 1,
+  "author": "JARVIS / trpg-package",
+  "description": "把本地跑团引擎的场景指令应用到这个枭熊房间：轮询 /scene/pending，执行移动/显隐/播报，回传场景快照。",
+  "icon": "icon.svg",
+  "action": {
+    "title": "跑团引擎桥",
+    "icon": "icon.svg",
+    "popover": "index.html",
+    "height": 420,
+    "width": 340
+  },
+  "background_url": "background.html"
+}

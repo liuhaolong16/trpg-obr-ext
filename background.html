@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>trpg bridge background</title></head>
+<body>
+<script type="module">
+  // 背景页只做保活与心跳日志：真正的场景操作在 popover 里执行（MVP 简化，避免两处抢指令）
+  let n = 0;
+  setInterval(() => {
+    n += 1;
+    if (n % 40 === 0) console.log("[trpg-bridge] alive", new Date().toISOString());
+  }, 3000);
+</script>
+</body></html>

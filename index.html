@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>跑团引擎桥</title>
+<style>
+  body { margin: 0; padding: 10px; font: 13px/1.5 system-ui, "Microsoft YaHei", sans-serif; background: #1e1a16; color: #eee; }
+  h1 { font-size: 14px; margin: 0 0 8px; color: #c9a227; }
+  .row { display: flex; gap: 6px; margin-bottom: 8px; }
+  input { flex: 1; min-width: 0; padding: 5px 6px; background: #2a241d; color: #eee; border: 1px solid #4a3f33; border-radius: 4px; }
+  button { padding: 5px 9px; background: #3a3227; color: #eee; border: 1px solid #5a4b39; border-radius: 4px; cursor: pointer; }
+  button:hover { background: #4a3f31; }
+  #status { color: #9fd39f; margin-bottom: 6px; min-height: 18px; }
+  #log { font-size: 11px; color: #bbb; max-height: 210px; overflow-y: auto; border-top: 1px solid #3a3227; padding-top: 6px; }
+  #log div { margin-bottom: 2px; word-break: break-all; }
+</style>
+</head>
+<body>
+  <h1>跑团引擎桥</h1>
+  <div id="status">正在载入…</div>
+  <div class="row">
+    <input id="engine" placeholder="http://127.0.0.1:17650">
+    <button id="save">保存</button>
+  </div>
+  <div class="row">
+    <button id="poll">开始轮询</button>
+    <button id="snap">取快照</button>
+  </div>
+  <div id="log"></div>
+
+<script type="module">
+import OBR from "https://esm.sh/@owlbear-rodeo/sdk@3.1.0";
+
+const ENGINE_KEY = "trpg.engine.url";
+const $ = (id) => document.getElementById(id);
+
+function log(msg) {
+  const el = $("log");
+  const line = document.createElement("div");
+  line.textContent = new Date().toLocaleTimeString() + "  " + msg;
+  el.prepend(line);
+  while (el.childElementCount > 40) el.lastChild.remove();
+}
+
+function getEngine() {
+  return localStorage.getItem(ENGINE_KEY) || "http://127.0.0.1:17650";
+}
+
+async function api(path, opt) {
+  const r = await fetch(getEngine() + path, opt);
+  if (!r.ok) throw new Error(r.status + " " + (await r.text()).slice(0, 120));
+  return r.json();
+}
+
+/* 场景快照：把当前场景的可机读状态回传引擎（供截图/审计/回放） */
+async function snapshot() {
+  const [items, grid, scale] = await Promise.all([
+    OBR.scene.items.getItems(),
+    OBR.scene.grid.getDpi(),
+    OBR.scene.grid.getScale(),
+  ]);
+  return {
+    dpi: grid,
+    scale: scale && scale.parsed ? scale.parsed.multiplier : null,
+    tokens: items
+      .filter((i) => i.layer === "CHARACTER" || i.layer === "MOUNT")
+      .map((i) => ({ id: i.id, name: i.name, x: Math.round(i.position.x), y: Math.round(i.position.y), visible: i.visible })),
+    mapItems: items.filter((i) => i.layer === "MAP").map((i) => ({ id: i.id, name: i.name })),
+  };
+}
+
+/* 应用一条引擎指令 */
+async function applyOp(op) {
+  if (op.op === "ping") {
+    OBR.notification.show(op.text || "引擎在线", "INFO");
+    return "ping";
+  }
+  if (op.op === "say") {
+    OBR.notification.show(op.text || "", "DEFAULT");
+    return "say";
+  }
+  if (op.op === "move" || op.op === "hide" || op.op === "show") {
+    if (!op.token) throw new Error("move/hide 需要 token（名字或 id）");
+    const items = await OBR.scene.items.getItems(
+      (i) => i.name === op.token || i.id === op.token
+    );
+    if (!items.length) throw new Error("场景里找不到 token: " + op.token);
+    const patched = items.map((i) => {
+      const n = { ...i };
+      if (op.op === "move" && typeof op.x === "number" && typeof op.y === "number") {
+        n.position = { x: op.x, y: op.y };
+      }
+      if (op.op === "hide") n.visible = false;
+      if (op.op === "show") n.visible = true;
+      return n;
+    });
+    await OBR.scene.items.updateItems(patched);
+    return op.op + " " + op.token;
+  }
+  throw new Error("未知指令: " + op.op);
+}
+
+let timer = null;
+async function tick() {
+  try {
+    const campaigns = await api("/api/health");
+    if (!campaigns.campaigns || !campaigns.campaigns.length) {
+      setStatus("引擎在线，但没有战役");
+      return;
+    }
+    const id = campaigns.campaigns[0];
+    const pending = await api("/api/campaign/" + encodeURIComponent(id) + "/scene/pending");
+    setStatus("引擎在线 · 战役 " + id);
+    if (!pending.ops || !pending.ops.length) return;
+    for (const op of pending.ops) {
+      try {
+        const done = await applyOp(op);
+        log("✔ " + done);
+      } catch (e) {
+        log("✘ " + op.op + " :: " + e.message);
+      }
+    }
+    const snap = await snapshot();
+    await fetch(getEngine() + "/api/campaign/" + encodeURIComponent(id) + "/scene/state", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(snap),
+    });
+    log("快照回传 " + snap.tokens.length + " 个 token");
+  } catch (e) {
+    setStatus("引擎离线: " + e.message);
+  }
+}
+
+function setStatus(t) {
+  const el = $("status");
+  if (el) el.textContent = t;
+}
+
+OBR.onReady(() => {
+  $("engine").value = getEngine();
+  $("save").addEventListener("click", () => {
+    localStorage.setItem(ENGINE_KEY, $("engine").value.trim());
+    log("引擎地址已保存: " + getEngine());
+  });
+  $("poll").addEventListener("click", async () => {
+    const on = $("poll").dataset.on === "1";
+    if (on) {
+      clearInterval(timer); timer = null; $("poll").dataset.on = "0"; $("poll").textContent = "开始轮询";
+      log("轮询已停");
+    } else {
+      timer = setInterval(tick, 1500); $("poll").dataset.on = "1"; $("poll").textContent = "停止轮询";
+      log("轮询已开（1.5s）"); tick();
+    }
+  });
+  $("snap").addEventListener("click", async () => {
+    try { const s = await snapshot(); log("快照: " + JSON.stringify(s).slice(0, 160)); }
+    catch (e) { log("快照失败: " + e.message); }
+  });
+  setStatus("已载入扩展");
+});
+</script>
+</body>
+</html>
